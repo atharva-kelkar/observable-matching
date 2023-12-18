@@ -37,9 +37,9 @@ def predict_force(params, x, f_proj, div):
     ## Calculate force as a (minus) derivative of energy
     f_cg = - grad(predict_energy, argnums=1)(params, x)
     ## Project force
-    f_proj = project_force(f_cg, f_proj, div)
+    f_cv = project_force(f_cg, f_proj, div)
     ## Return projected force
-    return f_proj
+    return f_cv
 
 def init_MLP(layer_widths, parent_key, scale=0.1):
     """Function to initialize MLP given layer widths"""
@@ -84,4 +84,26 @@ def update(param, x, y, f_proj, div, lr):
 def weighted_update(param, x, y, f_proj, div, lr, wts):
     """Function to update parameters of NN based on gradient steps"""
     loss, grad_loss = jax.value_and_grad(weighted_loss_fn)(param, x, y, f_proj, div, wts)
+    return loss, jax.tree_util.tree_map(lambda x, g: x - g * lr, param, grad_loss), grad_loss
+
+## Section with CG forces
+
+def predict_force_with_cg(params, x, f_proj, div):
+    ## Calculate force as a (minus) derivative of energy
+    f_cg = - grad(predict_energy, argnums=1)(params, x)
+    ## Project force
+    f_cv = project_force(f_cg, f_proj, div)
+    ## Return projected force
+    return f_cg, f_cv
+
+batched_predict_force_with_cg = vmap(predict_force_with_cg, in_axes=(None, 0, 0, 0))
+
+def weighted_loss_fn_with_cg(params, x, f_cg, f_cv, f_proj, div, cv_wts, cg_cv_wts):
+    """Function to calculate MSE loss"""
+    f_cg_pred, f_cv_pred = batched_predict_force_with_cg(params, x, f_proj, div)
+    return cg_cv_wts[0] * jnp.mean((f_cg_pred  - f_cg) ** 2) + cg_cv_wts[1] * jnp.mean(cv_wts * (f_cv_pred  - f_cv) ** 2)
+
+def weighted_update_with_cg(param, x, f_cg, y, f_proj, div, lr, wts, cg_cv_wts):
+    """Function to update parameters of NN based on gradient steps"""
+    loss, grad_loss = jax.value_and_grad(weighted_loss_fn_with_cg)(param, x, f_cg, y, f_proj, div, wts, cg_cv_wts)
     return loss, jax.tree_util.tree_map(lambda x, g: x - g * lr, param, grad_loss), grad_loss

@@ -3,7 +3,7 @@ import mdtraj as md
 from density import gaussian_kde, gaussian_kde_adaptive2, density2force, compute_forces
 from projection import calc_force_proj_operator, calc_div_operator
 from dataloader import create_test_train_datasets
-from nn import init_MLP, weighted_update
+from nn import init_MLP, weighted_update, weighted_update_with_cg
 import jax
 from jax import jit, vmap
 import jax.numpy as jnp
@@ -163,20 +163,28 @@ def trainer(
         n_epochs, 
         to_save_model,
         out_model_name,
+        train_mode='cv',
+        cg_cv_wts=jnp.array([0.5, 0.5]),
         ):
-    ## Fix weights as a static argument
-    wtd_update = jax.tree_util.Partial(weighted_update, wts=loss_wts)
+    if train_mode == 'cv':
+        ## Fix weights as a static argument
+        wtd_update = jax.tree_util.Partial(weighted_update, wts=loss_wts)
+    elif train_mode == 'cv+cg':
+        wtd_update = jax.tree_util.Partial(weighted_update_with_cg, wts=loss_wts, cg_cv_wts=cg_cv_wts)
     ## JIT function
     jit_wtd_update = jit(wtd_update)
+
     ## Training loop
     for lr in lrs:
         for epoch in tqdm(range(n_epochs)):
-            for i, (x, _, _, f_proj, div, f) in tqdm(enumerate(trainloader), total=len(trainloader)):
+            for i, (x, _, f_cg, f_proj, div, f_cv) in tqdm(enumerate(trainloader), total=len(trainloader)):
                 if i % 250 == 1:
                     losses.append(loss)
                     # print(f'Running for i={i}, loss value of {losses[-1]}')
-                
-                loss, params, grad_loss = jit_wtd_update(params, x, f, f_proj, div, lr)
+                if train_mode == 'cv':
+                    loss, params, grad_loss = jit_wtd_update(params, x, f_cv, f_proj, div, lr)
+                elif train_mode == 'cv+cg':
+                    loss, params, grad_loss = jit_wtd_update(params, x, f_cg, f_cv, f_proj, div, lr)
             print(loss)
     
     if to_save_model:
@@ -185,12 +193,13 @@ def trainer(
         ## Save losses
         np.save(f'models/losses_{out_model_name}.npy', losses)
 
-def make_model_name(model_layers, lrs, n_epochs):
+def make_model_name(train_mode, cg_cv_ratio, model_layers, lrs, n_epochs):
     n_layers = len(model_layers) - 2
     lr_start = lrs[0]
     lr_end = lrs[-1]
     width = model_layers[1]
-    return f'n_layers={n_layers}_width={width}_startLR={lr_start}_endLR={lr_end}_epochs={n_epochs}'
+    cg, cv = cg_cv_ratio
+    return f'mode={train_mode}_cgcvrat={cg:.2f}:{cv:.2f}_n_layers={n_layers}_width={width}_startLR={lr_start}_endLR={lr_end}_epochs={n_epochs}'
 
 if __name__ == "__main__":
 
@@ -201,14 +210,16 @@ if __name__ == "__main__":
     calculate_fproj_arr, calculate_div_arr = False, False
     to_save_int_output = False
     to_load_precomputed_dataset = True
-    model_layers = [12, 128, 128, 128, 128, 1]
+    train_mode = 'cv+cg' # 'cv' or 'cv+cg'
+    cg_cv_ratio = jnp.array([0.1, 0.9])
+    model_layers = [12, 256, 256, 256, 256, 1]
     to_train_model = True
-    to_restart_training = True
+    to_restart_training = False
     restart_model_name = 'n_layers=4_width=128_startLR=0.001_endLR=0.001' # 'simple_jax_model_4_hidden_128_noLastBias_scale_0.1_LR0.001'
-    lrs = [0.0005]
-    n_epochs = 30
+    lrs = [0.001, 0.0005, 0.0001]
+    n_epochs = 20
     to_save_model = True
-    out_model_name = make_model_name(model_layers, lrs, n_epochs)
+    out_model_name = make_model_name(train_mode, cg_cv_ratio, model_layers, lrs, n_epochs)
     
 
     ## Index arrays    
@@ -403,6 +414,8 @@ if __name__ == "__main__":
             n_epochs=n_epochs,
             to_save_model=to_save_model,
             out_model_name=out_model_name,
+            train_mode=train_mode,
+            cg_cv_wts=cg_cv_ratio
         )
 
 
