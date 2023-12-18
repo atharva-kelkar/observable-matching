@@ -170,7 +170,7 @@ def trainer(
     jit_wtd_update = jit(wtd_update)
     ## Training loop
     for lr in lrs:
-        for epoch in tqdm(range(n_epochs), total=len(n_epochs)):
+        for epoch in tqdm(range(n_epochs)):
             for i, (x, _, _, f_proj, div, f) in tqdm(enumerate(trainloader), total=len(trainloader)):
                 if i % 250 == 1:
                     losses.append(loss)
@@ -205,9 +205,9 @@ if __name__ == "__main__":
     to_train_model = True
     to_restart_training = True
     restart_model_name = 'n_layers=4_width=128_startLR=0.001_endLR=0.001' # 'simple_jax_model_4_hidden_128_noLastBias_scale_0.1_LR0.001'
-    lrs = [0.001]
-    n_epochs = 2
-    to_save_model = False
+    lrs = [0.0005]
+    n_epochs = 30
+    to_save_model = True
     out_model_name = make_model_name(model_layers, lrs, n_epochs)
     
 
