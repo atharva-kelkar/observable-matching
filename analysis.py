@@ -21,7 +21,7 @@ def make_test_preds(params, testloader):
     calc_feat = []
 
     ## Create jitted version of predict function
-    partial_pred = jax.tree_util.Partial(batched_predict_force, params=params)
+    # partial_pred = jax.tree_util.Partial(batched_predict_force, params=params)
     jitted_pred = jit(batched_predict_force)
 
     ## Loop over all batches of the testloader

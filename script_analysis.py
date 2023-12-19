@@ -18,7 +18,7 @@ if __name__ == "__main__":
 
     ## File labels
     preloaded_data_out_file = '/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/feature_divergence/precomputed_dataset.npz'
-    model_name = 'mode=cv+cg_cgcvrat=0.10:0.90_n_layers=4_width=256_startLR=0.0005_endLR=0.0005_epochs=10'
+    model_name = 'mode=cv+cg_cgcvrat=0.10:0.90_n_layers=4_width=256_startLR=0.001_endLR=0.0001_epochs=20'
     test_model_file = f'/home/mi/atkelkar/python_codes/projected_force_matching/models/{model_name}.pkl'
     to_save_plot = True
 
@@ -43,7 +43,7 @@ if __name__ == "__main__":
         force_proj_arr,
         div_arr,
         interpolated_forces,
-        test_batch_size = 1
+        test_batch_size = 1024 * 10
     )
 
     print('Calculating labels for all features...')
