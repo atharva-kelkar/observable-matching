@@ -70,3 +70,43 @@ def create_test_train_datasets(
                                             )
     
     return trainloader, testloader
+
+
+def select_sample_phipsi(phi_traj, psi_traj, phi_value, psi_value, tolerance):
+    idx = np.where(np.logical_and(np.logical_and(phi_traj > phi_value-tolerance, phi_traj < phi_value+tolerance),
+                                  np.logical_and(psi_traj > psi_value-tolerance, psi_traj < psi_value+tolerance)))[0]
+    if len(idx) == 0:
+        return None
+    else:
+        return np.random.choice(idx, size=1)[0]
+    
+
+def select_start_configs(
+        ngrid, 
+        phi_traj, 
+        psi_traj,
+        aladi_crd,
+        cg_atoms
+        ):
+    # Make grid of equally spaced points from -pi to +pi
+    agrid = np.linspace(-np.pi, np.pi, int(ngrid+1))[:-1] + (np.pi/ngrid)
+    # Define tolerance based on grid size
+    tolerance = (np.pi/(2*ngrid))
+    # Blank lists to append points to
+    phipsi = []
+    sample = []
+    # Loop over all phi points
+    for phi in agrid:
+        # Loop over all psi grid points
+        for psi in agrid:
+            # Select samples of phi and psi from the grid
+            idx = select_sample_phipsi(phi_traj, psi_traj, phi, psi, tolerance)
+            # If something is sampled, attach to lists
+            if idx is not None:
+                phipsi.append([phi, psi])
+                sample.append(aladi_crd[idx][cg_atoms])
+    # Stack list together
+    x0_ala2_phipsicover = np.stack(sample)
+    phipsi = np.array(phipsi)
+    
+    return x0_ala2_phipsicover, phipsi
