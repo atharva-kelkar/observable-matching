@@ -179,27 +179,38 @@ def trainer(
         for epoch in tqdm(range(n_epochs)):
             for i, (x, _, f_cg, f_proj, div, f_cv) in tqdm(enumerate(trainloader), total=len(trainloader)):
                 if i % 250 == 1:
-                    losses.append(loss)
+                    losses_cv.append(loss_cv)
+                    grad_losses_cv.append(grad_loss_cv)
+                    if train_mode == 'cv+cg':
+                        losses_cg.append(loss_cg)
+                        grad_losses_cg.append(grad_loss_cg)
                     # print(f'Running for i={i}, loss value of {losses[-1]}')
                 if train_mode == 'cv':
                     loss, params, grad_loss = jit_wtd_update(params, x, f_cv, f_proj, div, lr)
                 elif train_mode == 'cv+cg':
-                    loss, params, grad_loss = jit_wtd_update(params, x, f_cg, f_cv, f_proj, div, lr)
-            print(loss)
+                    loss_cg, loss_cv, params, grad_loss_cg, grad_loss_cv = jit_wtd_update(params, x, f_cg, f_cv, f_proj, div, lr)
+            print(loss_cg, loss_cv)
     
     if to_save_model:
         ## Save model parameters
         pickle.dump(params, open(f'models/{out_model_name}.pkl', 'wb'))
         ## Save losses
-        np.save(f'models/losses_{out_model_name}.npy', losses)
+        # np.save(f'models/losses_{out_model_name}.npy', losses)
+        np.savez(
+            f'models/losses_{out_model_name}.npz', 
+            loss_cv=losses_cv,
+            loss_cg=losses_cg,
+            # grad_loss_cg=grad_losses_cg,
+            # grad_losses_cv=grad_losses_cv
+        )
 
-def make_model_name(train_mode, cg_cv_ratio, model_layers, lrs, n_epochs):
+def make_model_name(train_mode, cg_cv_ratio, batch_size, model_layers, lrs, n_epochs):
     n_layers = len(model_layers) - 2
     lr_start = lrs[0]
     lr_end = lrs[-1]
     width = model_layers[1]
     cg, cv = cg_cv_ratio
-    return f'mode={train_mode}_cgcvrat={cg:.2f}:{cv:.2f}_n_layers={n_layers}_width={width}_startLR={lr_start}_endLR={lr_end}_epochs={n_epochs}'
+    return f'mode={train_mode}_cgcvrat={cg:.2f}:{cv:.2f}_bs={batch_size}_n_layers={n_layers}_width={width}_startLR={lr_start}_endLR={lr_end}_epochs={n_epochs}'
 
 if __name__ == "__main__":
 
@@ -213,13 +224,14 @@ if __name__ == "__main__":
     train_mode = 'cv+cg' # 'cv' or 'cv+cg'
     cg_cv_ratio = jnp.array([0.1, 0.9])
     model_layers = [12, 256, 256, 256, 256, 1]
+    batch_size = 256
     to_train_model = True
     to_restart_training = False
     restart_model_name = 'n_layers=4_width=128_startLR=0.001_endLR=0.001' # 'simple_jax_model_4_hidden_128_noLastBias_scale_0.1_LR0.001'
-    lrs = [0.001, 0.0005, 0.0001]
-    n_epochs = 20
+    lrs = [0.01, 0.005, 0.001]
+    n_epochs = 30
     to_save_model = True
-    out_model_name = make_model_name(train_mode, cg_cv_ratio, model_layers, lrs, n_epochs)
+    out_model_name = make_model_name(train_mode, cg_cv_ratio, batch_size, model_layers, lrs, n_epochs)
     
 
     ## Index arrays    
@@ -387,6 +399,7 @@ if __name__ == "__main__":
         force_proj_arr,
         div_arr,
         interpolated_forces,
+        batch_size=batch_size
     )
 
     ## Initialize neural network parameters
@@ -395,7 +408,10 @@ if __name__ == "__main__":
     params = init_MLP(model_layers, key)
 
     ## Train neural network
-    losses = []
+    losses_cg = []
+    losses_cv = []
+    grad_losses_cg = []
+    grad_losses_cv = []
     loss_norm = []
 
     ## Load weights if training is to be restarted

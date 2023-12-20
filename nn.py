@@ -87,23 +87,26 @@ def weighted_update(param, x, y, f_proj, div, lr, wts):
     return loss, jax.tree_util.tree_map(lambda x, g: x - g * lr, param, grad_loss), grad_loss
 
 ## Section with CG forces
+def predict_cg_force(params, x):
+    ## Calculate CG force as a (minus) derivative of energy
+    return - grad(predict_energy, argnums=1)(params, x)
 
-def predict_force_with_cg(params, x, f_proj, div):
-    ## Calculate force as a (minus) derivative of energy
-    f_cg = - grad(predict_energy, argnums=1)(params, x)
-    ## Project force
-    f_cv = project_force(f_cg, f_proj, div)
-    ## Return projected force
-    return f_cg, f_cv
+batched_predict_cg_force = vmap(predict_cg_force, in_axes=(None, 0))
+batched_predict_cv_force = batched_predict_force
 
-batched_predict_force_with_cg = vmap(predict_force_with_cg, in_axes=(None, 0, 0, 0))
+def cv_force_loss(params, x, f_cv, f_proj, div, cv_wts):
+    """Function to calculate MSE loss of CV force"""
+    f_cv_pred = batched_predict_cv_force(params, x, f_proj, div)
+    return jnp.mean(cv_wts * (f_cv_pred  - f_cv) ** 2)
 
-def weighted_loss_fn_with_cg(params, x, f_cg, f_cv, f_proj, div, cv_wts, cg_cv_wts):
-    """Function to calculate MSE loss"""
-    f_cg_pred, f_cv_pred = batched_predict_force_with_cg(params, x, f_proj, div)
-    return cg_cv_wts[0] * jnp.mean((f_cg_pred  - f_cg) ** 2) + cg_cv_wts[1] * jnp.mean(cv_wts * (f_cv_pred  - f_cv) ** 2)
+def cg_force_loss(params, x, f_cg):
+    """Function to calculate MSE loss of CG force"""
+    f_cg_pred = batched_predict_cg_force(params, x)
+    return jnp.mean((f_cg_pred  - f_cg) ** 2)
 
 def weighted_update_with_cg(param, x, f_cg, y, f_proj, div, lr, wts, cg_cv_wts):
     """Function to update parameters of NN based on gradient steps"""
-    loss, grad_loss = jax.value_and_grad(weighted_loss_fn_with_cg)(param, x, f_cg, y, f_proj, div, wts, cg_cv_wts)
-    return loss, jax.tree_util.tree_map(lambda x, g: x - g * lr, param, grad_loss), grad_loss
+    loss_CG, grad_loss_CG = jax.value_and_grad(cg_force_loss)(param, x, f_cg)
+    loss_CV, grad_loss_CV = jax.value_and_grad(cv_force_loss)(param, x, y, f_proj, div, wts)
+    
+    return loss_CG, loss_CV, jax.tree_util.tree_map(lambda x, g_CG, g_CV: x - (cg_cv_wts[0] * g_CG + cg_cv_wts[1] * g_CV) * lr, param, grad_loss_CG, grad_loss_CV), grad_loss_CG, grad_loss_CV
