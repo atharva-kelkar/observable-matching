@@ -18,7 +18,7 @@ if __name__ == "__main__":
 
     ## File labels
     preloaded_data_out_file = '/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/feature_divergence/precomputed_dataset.npz'
-    model_name = 'mode=cv+cg_cgcvrat=0.10:0.90_n_layers=4_width=256_startLR=0.001_endLR=0.0001_epochs=20'
+    model_name = 'mode=cv+cg_cgcvrat=0.10:0.90_bs=256_n_layers=4_width=256_startLR=0.001_endLR=0.0001_epochs=50'
     test_model_file = f'/home/mi/atkelkar/python_codes/projected_force_matching/models/{model_name}.pkl'
     to_save_plot = True
 

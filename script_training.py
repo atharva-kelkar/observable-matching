@@ -163,6 +163,7 @@ def trainer(
         n_epochs, 
         to_save_model,
         out_model_name,
+        model_state,
         train_mode='cv',
         cg_cv_wts=jnp.array([0.5, 0.5]),
         ):
@@ -194,6 +195,7 @@ def trainer(
     if to_save_model:
         ## Save model parameters
         pickle.dump(params, open(f'models/{out_model_name}.pkl', 'wb'))
+        pickle.dump(model_state, open(f'models/state_{out_model_name}.pkl', 'wb'))
         ## Save losses
         # np.save(f'models/losses_{out_model_name}.npy', losses)
         np.savez(
@@ -210,7 +212,18 @@ def make_model_name(train_mode, cg_cv_ratio, batch_size, model_layers, lrs, n_ep
     lr_end = lrs[-1]
     width = model_layers[1]
     cg, cv = cg_cv_ratio
-    return f'mode={train_mode}_cgcvrat={cg:.2f}:{cv:.2f}_bs={batch_size}_n_layers={n_layers}_width={width}_startLR={lr_start}_endLR={lr_end}_epochs={n_epochs}'
+    model_name = f'mode={train_mode}_cgcvrat={cg:.2f}:{cv:.2f}_bs={batch_size}_n_layers={n_layers}_width={width}_startLR={lr_start}_endLR={lr_end}_epochs={n_epochs}'
+
+    state = {'n_layers': n_layers,
+             'model_layers': model_layers,
+             'cg_cv_ratio': cg_cv_ratio,
+             'lrs': lrs,
+             'n_epochs': n_epochs,
+             'train_mode': train_mode,
+             'model_name': model_name
+             }
+    
+    return state, model_name
 
 if __name__ == "__main__":
 
@@ -224,14 +237,14 @@ if __name__ == "__main__":
     train_mode = 'cv+cg' # 'cv' or 'cv+cg'
     cg_cv_ratio = jnp.array([0.1, 0.9])
     model_layers = [12, 256, 256, 256, 256, 1]
-    batch_size = 256
+    batch_size = 64
     to_train_model = True
     to_restart_training = False
     restart_model_name = 'n_layers=4_width=128_startLR=0.001_endLR=0.001' # 'simple_jax_model_4_hidden_128_noLastBias_scale_0.1_LR0.001'
-    lrs = [0.01, 0.005, 0.001]
-    n_epochs = 30
+    lrs = [0.001, 0.0001]
+    n_epochs = 100
     to_save_model = True
-    out_model_name = make_model_name(train_mode, cg_cv_ratio, batch_size, model_layers, lrs, n_epochs)
+    model_state, out_model_name = make_model_name(train_mode, cg_cv_ratio, batch_size, model_layers, lrs, n_epochs)
     
 
     ## Index arrays    
@@ -431,7 +444,8 @@ if __name__ == "__main__":
             to_save_model=to_save_model,
             out_model_name=out_model_name,
             train_mode=train_mode,
-            cg_cv_wts=cg_cv_ratio
+            cg_cv_wts=cg_cv_ratio,
+            model_state=model_state
         )
 
 
