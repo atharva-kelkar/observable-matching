@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+@author: Atharva Kelkar
+@date: 13/12/2023
+"""
+
 import numpy as np
 import mdtraj as md
 from density import gaussian_kde, gaussian_kde_adaptive2, density2force, compute_forces
@@ -80,7 +87,8 @@ def force_projection_calculator(
         cg_atoms, 
         torsion_cg_idx, 
         dist_cg_idx,
-        out_file
+        out_file='',
+        to_save_output=True
         ):
     ## Jit and vmap force projection operator
     jit_force_calc = jit(vmap(calc_force_proj_operator, in_axes=(0, None, None)))
@@ -103,11 +111,12 @@ def force_projection_calculator(
         
     force_proj_arr = jit_out.astype(np.float32)
     ## Save output array
-    print(f'***** OUT FILE IS {out_file} *****')
-    np.save(
-        out_file,
-        force_proj_arr
-    )
+    if to_save_output:
+        print(f'***** OUT FILE IS {out_file} *****')
+        np.save(
+            out_file,
+            force_proj_arr
+        )
 
     return force_proj_arr
 
@@ -125,7 +134,7 @@ def divergence_calculator(
     ## Calculate divergence for 1/100th of the dataset and save as individual npy files
     for n_split in tqdm(range(n_splits)):
         a = jit_div_operator(
-                aladi_crd[int((n_split) * 0.01*10**6) : int((n_split + 1) * 0.01*10**6), cg_atoms],
+                aladi_crd[int((n_split) * len(aladi_crd) // n_splits) : int((n_split + 1) * len(aladi_crd) // n_splits), cg_atoms],
                 torsion_cg_idx,
                 dist_cg_idx
             )
@@ -242,7 +251,7 @@ if __name__ == "__main__":
     to_restart_training = False
     restart_model_name = 'n_layers=4_width=128_startLR=0.001_endLR=0.001' # 'simple_jax_model_4_hidden_128_noLastBias_scale_0.1_LR0.001'
     lrs = [0.001, 0.0001]
-    n_epochs = 100
+    n_epochs = 50
     to_save_model = True
     model_state, out_model_name = make_model_name(train_mode, cg_cv_ratio, batch_size, model_layers, lrs, n_epochs)
     
