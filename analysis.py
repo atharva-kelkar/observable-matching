@@ -12,6 +12,8 @@ from jax import vmap, jit
 from nn import batched_predict_force
 from featurize import featurize
 from tqdm import tqdm
+from glob import glob
+
 
 def make_test_preds(params, testloader):
     ## Predict forces for test set based on coordinates
@@ -54,3 +56,97 @@ def make_label_pred_plot(ax, feat, labels, preds, plot_stride=1):
         )
     
     return ax
+
+
+def load_sim_coords(
+        sim_folder: str, 
+        sim_file_name: str,
+        numfiles: int = None,
+        ) -> np.ndarray:
+    """Function to load simulation coordinates
+
+    Parameters
+    ----------
+    sim_folder
+        Base folder for simulation output
+    sim_file_name
+        Template file name for simulation output
+
+    Returns
+    -------
+    coords
+        Numpy array of stacked coordinates
+    """
+    ## Define number of files if not given already
+    if numfiles is None:
+        numfiles = len(sorted(glob(f'{sim_folder}/*')))
+
+    coords = []
+    ## Compile all coordinates
+    for i in range(numfiles):
+        coords.append(np.load(f'{sim_folder}/{sim_file_name.format(i)}', allow_pickle=True))
+
+    return np.concatenate(coords)
+
+def make_fe(phi, psi, bins=100):
+    """Function to make free energy from 2 arrays
+
+    Parameters
+    ----------
+    phi
+        Array of phi values
+    psi
+        Array of psi values
+    bins, optional
+        Number of bins or list of bins, by default 100
+
+    Returns
+    -------
+        free energy, raw histogram, bins in x, bins in y
+    """
+    hist, bins_1, bins_2 = np.histogram2d(
+        phi, psi, 
+        bins=bins
+        )
+    
+    fe = -np.log(hist/hist.sum())
+
+    return fe, hist, bins_1, bins_2
+
+def make_fe_plot(
+        bins_1, 
+        bins_2, 
+        fe,
+        levels=10,
+        cmap='rainbow'
+        ):
+    """Function to make FE contour plot, given bins and FE vals
+
+    Parameters
+    ----------
+    bins_1
+        Bins along 1st dimension
+    bins_2
+        Bins along 2nd dimension
+    fe
+        Free energy corresponding to bins
+    levels, optional
+        Number of levels in contour plot, by default 10
+
+    Returns
+    -------
+    fig, ax
+        Matplotlib figure and axes 
+    """
+
+    fig, ax = plt.subplots()
+
+    ## Make contour plot
+    ax.contourf(
+        bins_1[:-1], bins_2[:-1],
+        fe.T - fe.T.min(),
+        levels=levels,
+        cmap=cmap,
+    )
+
+    return fig, ax
