@@ -12,16 +12,17 @@ import mdtraj as md
 
 if __name__ == "__main__":
     import_home = '/import/a12/users/atkelkar/data/AlanineDipeptide/simulation_output/projected_force_simulations/'
-    model_name = 'mode=cv+cg_cgcvrat=0.10:0.90_n_layers=4_width=256_startLR=0.001_endLR=0.0001_epochs=20'
+    model_name = 'mode=cv+cg_cgcvrat=0.10:0.90_bs=64_n_layers=4_width=256_startLR=0.001_endLR=0.0001_epochs=50'
     sim_folder = f'{import_home}/{model_name}'
     cg_atoms = np.array([5,7,9,11,15,17])-1
     torsion_cg_idx = [[0,1,2,4], [1,2,4,5]]
-    to_save_rplot = True
+    to_save_rplot, to_save_traj = True, True
 
     ## Load simulation coordinates
     coords = load_sim_coords(
         sim_folder=sim_folder,
-        sim_file_name='sim_{}.pkl'
+        sim_file_name='sim_{}.pkl',
+        numfiles=64
     )
 
     ## Load topology
@@ -32,7 +33,7 @@ if __name__ == "__main__":
     top = top.atom_slice(cg_atoms).topology
     
     ## Make trajectory
-    traj = md.Trajectory(coords, top)
+    traj = md.Trajectory(coords * 0.1, top)
 
     ## Calculate torsions
     torsion_traj = md.compute_dihedrals(traj, torsion_cg_idx)
@@ -52,4 +53,6 @@ if __name__ == "__main__":
                     dpi=200
                     )
         
-    
+    if to_save_traj:
+        traj.save_xtc(f'{sim_folder}/all_sims.xtc')
+        traj[0].save_pdb(f'{sim_folder}/sim.pdb')

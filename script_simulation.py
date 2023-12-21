@@ -12,7 +12,7 @@ import jax
 from simulate import forcefield, step_fn, init_state, timestep
 import time
 import pickle
-from script_functions import load_ala2_data
+from script_training import load_ala2_data
 import mdtraj as md
 from dataloader import select_start_configs
 import os
@@ -62,7 +62,7 @@ if __name__ == "__main__":
     aladi_file = f'{import_home}/all_atom_data/raw_trajectory/alanine-dipeptide-1Mx1ps-with-force.npz'
     top_file = f'{import_home}/all_atom_data/raw_trajectory/alanine_1mn.pdb'
     forcemap_file = f'{import_home}/force_maps/basic_force_map.npy'
-    model_name = 'mode=cv+cg_cgcvrat=0.10:0.90_n_layers=4_width=256_startLR=0.001_endLR=0.0001_epochs=20'
+    model_name = 'mode=cv+cg_cgcvrat=0.10:0.90_bs=64_n_layers=4_width=256_startLR=0.001_endLR=0.0001_epochs=50'
     sim_dir = f'{import_home}/simulation_output/projected_force_simulations/{model_name}'
     ## Make storage directory
     os.mkdir(sim_dir)
@@ -70,7 +70,7 @@ if __name__ == "__main__":
     
     ## Set simulation parameters
     ngrid = 10
-    nstep_ala2 = 10**4
+    nstep_ala2 = 2 * 10**5
     dt = 1e-5
     D = 1
     write_every = 10
