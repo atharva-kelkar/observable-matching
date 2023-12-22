@@ -90,6 +90,7 @@ class State:
     position: Array
     force: Array
     noise: Array
+    rng: Array
 
 
 @dataclass
@@ -112,6 +113,7 @@ class VeloState:
     noise: Array
     velocities: Array
     masses: Array
+    rng: Array
 
 def forcefield(params, x):
     """Function that returns force on each position given NN params"""
@@ -133,8 +135,10 @@ def init_state(x, f):
     state
         State with initialized position and velocity
     """
+    seed = 0
+    key = jax.random.PRNGKey(seed)
     masses = jnp.array([12, 14, 12, 12, 12, 14]) / 418.4
-    state = VeloState(x, f, jnp.zeros_like(x), jnp.zeros_like(x), masses)
+    state = VeloState(position=x, force=f, noise=jnp.zeros_like(x), velocities=jnp.zeros_like(x), masses=masses, rng=key)
     return state
 
 
@@ -145,7 +149,6 @@ def timestep(
         beta,
         vscale,
         noisescale,
-
         ):
     """Timestep method for Langevin dynamics
     
@@ -162,6 +165,7 @@ def timestep(
     v_old = state.velocities
     masses = state.masses
     x_old = state.position
+    rng = state.rng
 
     # Calc forces
     forces = forcefield(params, x_old)
@@ -172,25 +176,37 @@ def timestep(
     # A (position update)
     x_new = x_old + v_new * dt * 0.5
 
-    # O (noise)
-    noise = jnp.sqrt(1.0 / beta / masses[:, jnp.newaxis])
-    noise = noise * jnp.array(
-        np.random.normal(
-            size=x_new.shape
-        )
-    )
+    # noise = noise * jnp.array(
+    #     np.random.normal(
+    #         size=x_new.shape
+    #     )
+    # )
 
+    # O (noise)
+    
+    # Split keys
+    key, split = jax.random.split(rng)
+    noise = jnp.sqrt(1.0 / beta / masses[:, jnp.newaxis])
+    # Sample noise
+    noise = noise * jax.random.normal(split, shape=x_new.shape)
     v_new = v_new * vscale + noisescale * noise
 
     # A
     x_new = x_new + v_new * dt * 0.5
 
-    state = state.set(position=x_new)
-    forces = forcefield(params, state.position)
+    forces = forcefield(params, x_new)
 
     # B
     v_new = v_new + 0.5 * dt * forces / masses[:, jnp.newaxis]
-    state = state.set(velocities=v_new)
+
+    # Update state
+    state = state.set(
+        position=x_new, 
+        velocities=v_new, 
+        rng=key, 
+        force=forces,
+        noise=noise
+    )
 
     return state
 
