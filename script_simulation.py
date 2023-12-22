@@ -53,7 +53,10 @@ def simulator(
         print(f'Time required is {time.time() - tic:.2f} seconds')
 
         ## Save output as pickle
-        pickle.dump(log['position'], open(sim_out_file.format(i), 'wb')) # open(f'{import_home}/sim_1mn_frames_dt_1em5_massRescale_{i}.pkl', 'wb'))
+        pickle.dump(log['position'], open(sim_out_file.format('pos', i), 'wb')) # open(f'{import_home}/sim_1mn_frames_dt_1em5_massRescale_{i}.pkl', 'wb'))
+        pickle.dump(log['force'], open(sim_out_file.format('force', i), 'wb')) # open(f'{import_home}/sim_1mn_frames_dt_1em5_massRescale_{i}.pkl', 'wb'))
+        pickle.dump(log['velocities'], open(sim_out_file.format('velocity', i), 'wb')) # open(f'{import_home}/sim_1mn_frames_dt_1em5_massRescale_{i}.pkl', 'wb'))
+        pickle.dump(log['noise'], open(sim_out_file.format('noise', i), 'wb')) # open(f'{import_home}/sim_1mn_frames_dt_1em5_massRescale_{i}.pkl', 'wb'))
 
 
 if __name__ == "__main__":
@@ -63,15 +66,16 @@ if __name__ == "__main__":
     top_file = f'{import_home}/all_atom_data/raw_trajectory/alanine_1mn.pdb'
     forcemap_file = f'{import_home}/force_maps/basic_force_map.npy'
     model_name = 'mode=cv+cg_cgcvrat=0.10:0.90_bs=64_n_layers=4_width=256_startLR=0.001_endLR=0.0001_epochs=50'
-    sim_dir = f'{import_home}/simulation_output/projected_force_simulations/{model_name}'
+    run_index = 4
+    sim_dir = f'{import_home}/simulation_output/projected_force_simulations/{model_name}_run{run_index}'
     ## Make storage directory
     os.mkdir(sim_dir)
-    sim_out_file = f'{sim_dir}/sim_{{}}.pkl'
+    sim_out_file = f'{sim_dir}/sim_{{}}_{{}}.pkl'
     
     ## Set simulation parameters
     ngrid = 10
-    nstep_ala2 = 2 * 10**5
-    dt = 1e-5
+    nstep_ala2 = 10**4
+    dt = 1e-6
     D = 1
     write_every = 10
     beta = 1.6776
