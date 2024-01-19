@@ -7,7 +7,7 @@
 
 import jax
 import jax.numpy as jnp
-from featurize import featurize
+from featurize import ala2_featurize
 from jax import vmap, jit, grad
 from projection import project_force
 from functools import partial
@@ -24,7 +24,7 @@ def energy(params, feat, nonlinearity=jax.nn.tanh):
     return jnp.dot(w_last, activation) # + b_last
 
 
-def predict_energy(params, x):
+def predict_energy(params, featurize, x):
     """Function that predicts energy using forward pass through NN with features as input"""
     ## Featurize coordinates
     feat = featurize(x)
@@ -35,7 +35,7 @@ def predict_energy(params, x):
 
 def predict_force(params, x, f_proj, div):
     ## Calculate force as a (minus) derivative of energy
-    f_cg = - grad(predict_energy, argnums=1)(params, x)
+    f_cg = - grad(predict_energy, argnums=1)(params, ala2_featurize, x)
     ## Project force
     f_cv = project_force(f_cg, f_proj, div)
     ## Return projected force

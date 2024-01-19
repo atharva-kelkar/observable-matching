@@ -18,7 +18,7 @@ def ala2_ics(x, torsions_idx, dists_idx):
     dists = all_dists(dist_atoms)
     return jnp.concatenate((jnp.array(torsions), jnp.array(dists)))
 
-def featurize(
+def ala2_featurize(
         x, 
         torsion_cg_idx=np.array([[0,1,2,4], [1,2,4,5]]), 
         dists_cg_idx=np.array([[0, 1], [1, 2], [2, 3], [2, 4], [4, 5], [0, 2], [1, 3], [1, 4], [3, 4], [2, 5]])

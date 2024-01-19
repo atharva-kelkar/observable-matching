@@ -19,6 +19,7 @@ import pickle
 import sys
 import os
 from functools import partial
+from featurize import ala2_featurize
 
 def load_ala2_data(aladi_file, top_file, forcemap_file, stride=1):
     aladi_raw = np.load(aladi_file)
@@ -91,13 +92,12 @@ def force_projection_calculator(
         to_save_output=True
         ):
     ## Jit and vmap force projection operator
-    jit_force_calc = jit(vmap(calc_force_proj_operator, in_axes=(0, None, None)))
+    force_calc = jax.tree_util.Partial(calc_force_proj_operator, featurize=ala2_featurize)
+    jit_force_calc = jit(vmap(force_calc, in_axes=(0)))
     
     ## Calculate output used jitted function
     output = jit_force_calc(
         aladi_crd[:, cg_atoms], 
-        torsion_cg_idx,
-        dist_cg_idx
         )
     
     ## Convert JITted output to correct shape
@@ -132,13 +132,12 @@ def divergence_calculator(
     ## Make directory if needed
     os.makedirs(out_dir, exist_ok=True)
     ## Jit divergence operator
-    jit_div_operator = jit(vmap(calc_div_operator, in_axes=(0, None, None)))
+    div_operator = jax.tree_util.Partial(calc_div_operator, featurize=ala2_featurize, nfeatures=12)
+    jit_div_operator = jit(vmap(div_operator, in_axes=(0)))
     ## Calculate divergence for 1/100th of the dataset and save as individual npy files
     for n_split in tqdm(range(n_splits)):
         a = jit_div_operator(
                 aladi_crd[int((n_split) * len(aladi_crd) // n_splits) : int((n_split + 1) * len(aladi_crd) // n_splits), cg_atoms],
-                torsion_cg_idx,
-                dist_cg_idx
             )
         np.save(
             f'{out_dir}/jacobian_{n_split}.npy',
@@ -247,20 +246,22 @@ if __name__ == "__main__":
     top_file = '/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/raw_trajectory/alanine_1mn.pdb'
     forcemap_file = '/import/a12/users/atkelkar/data/AlanineDipeptide/force_maps/basic_force_map.npy'
     stride = 2
-    calculate_fproj_arr, calculate_div_arr = False, False
+    ## Flag variables
+    calculate_fproj_arr, calculate_div_arr = True, True
     to_save_int_output = False
-    to_load_precomputed_dataset = True
+    to_load_precomputed_dataset = False
+    to_train_model = False
+    to_restart_training = False
+    to_save_model = False
+    ## Model training variables
     train_mode = 'cv+cg' # 'cv' or 'cv+cg'
     cg_cv_ratio = jnp.array([0.1, 0.9])
     model_layers = [12, 256, 256, 256, 256, 1]
     batch_size = 64
-    to_train_model = True
     train_seed = 0
-    to_restart_training = False
     restart_model_name = 'mode=cv+cg_cgcvrat=0.10:0.90_bs=64_n_layers=4_width=256_startLR=0.001_endLR=0.001_epochs=10' # 'simple_jax_model_4_hidden_128_noLastBias_scale_0.1_LR0.001'
     lrs = [0.001, 0.0001]
     n_epochs = 50
-    to_save_model = True
     model_state, out_model_name = make_model_name(train_mode, cg_cv_ratio, batch_size, model_layers, lrs, n_epochs, stride, train_seed)
     # out_model_name = f'{out_model_name}_RestartTrain'
     print(f'Model name is {out_model_name}')
