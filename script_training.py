@@ -17,12 +17,12 @@ import jax.numpy as jnp
 from tqdm import tqdm
 import pickle
 import sys
+import os
 from functools import partial
 
-def load_ala2_data(aladi_file, top_file, forcemap_file):
+def load_ala2_data(aladi_file, top_file, forcemap_file, stride=1):
     aladi_raw = np.load(aladi_file)
 
-    stride = 1
     aladi_crd = aladi_raw['coordinates']
     aladi_forces = aladi_raw['forces']
     aladi_pdb = aladi_raw['pdb']
@@ -129,8 +129,10 @@ def divergence_calculator(
         n_splits=100
         ):
 
+    ## Make directory if needed
+    os.makedirs(out_dir, exist_ok=True)
+    ## Jit divergence operator
     jit_div_operator = jit(vmap(calc_div_operator, in_axes=(0, None, None)))
-
     ## Calculate divergence for 1/100th of the dataset and save as individual npy files
     for n_split in tqdm(range(n_splits)):
         a = jit_div_operator(
@@ -207,21 +209,23 @@ def trainer(
         pickle.dump(model_state, open(f'models/state_{out_model_name}.pkl', 'wb'))
         ## Save losses
         # np.save(f'models/losses_{out_model_name}.npy', losses)
-        np.savez(
-            f'models/losses_{out_model_name}.npz', 
-            loss_cv=losses_cv,
-            loss_cg=losses_cg,
-            # grad_loss_cg=grad_losses_cg,
-            # grad_losses_cv=grad_losses_cv
+        pickle.dump(
+            {
+                'loss_cv' : losses_cv,
+                'loss_cg' : losses_cg,
+                'grad_loss_cg' : grad_losses_cg,
+                'grad_losses_cv' : grad_losses_cv,
+            },
+            open(f'models/losses_{out_model_name}.pkl', 'wb') 
         )
 
-def make_model_name(train_mode, cg_cv_ratio, batch_size, model_layers, lrs, n_epochs):
+def make_model_name(train_mode, cg_cv_ratio, batch_size, model_layers, lrs, n_epochs, stride, train_seed):
     n_layers = len(model_layers) - 2
     lr_start = lrs[0]
     lr_end = lrs[-1]
     width = model_layers[1]
     cg, cv = cg_cv_ratio
-    model_name = f'mode={train_mode}_cgcvrat={cg:.2f}:{cv:.2f}_bs={batch_size}_n_layers={n_layers}_width={width}_startLR={lr_start}_endLR={lr_end}_epochs={n_epochs}'
+    model_name = f'mode={train_mode}_cgcvrat={cg:.3f}:{cv:.3f}_bs={batch_size}_n_layers={n_layers}_width={width}_startLR={lr_start}_endLR={lr_end}_epochs={n_epochs}_stride={stride}'
 
     state = {'n_layers': n_layers,
              'model_layers': model_layers,
@@ -229,7 +233,9 @@ def make_model_name(train_mode, cg_cv_ratio, batch_size, model_layers, lrs, n_ep
              'lrs': lrs,
              'n_epochs': n_epochs,
              'train_mode': train_mode,
-             'model_name': model_name
+             'model_name': model_name,
+             'dataset_stride': stride,
+             'train_seed': train_seed,
              }
     
     return state, model_name
@@ -240,6 +246,7 @@ if __name__ == "__main__":
     aladi_file = '/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/raw_trajectory/alanine-dipeptide-1Mx1ps-with-force.npz'
     top_file = '/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/raw_trajectory/alanine_1mn.pdb'
     forcemap_file = '/import/a12/users/atkelkar/data/AlanineDipeptide/force_maps/basic_force_map.npy'
+    stride = 2
     calculate_fproj_arr, calculate_div_arr = False, False
     to_save_int_output = False
     to_load_precomputed_dataset = True
@@ -248,13 +255,15 @@ if __name__ == "__main__":
     model_layers = [12, 256, 256, 256, 256, 1]
     batch_size = 64
     to_train_model = True
+    train_seed = 0
     to_restart_training = False
-    restart_model_name = 'n_layers=4_width=128_startLR=0.001_endLR=0.001' # 'simple_jax_model_4_hidden_128_noLastBias_scale_0.1_LR0.001'
+    restart_model_name = 'mode=cv+cg_cgcvrat=0.10:0.90_bs=64_n_layers=4_width=256_startLR=0.001_endLR=0.001_epochs=10' # 'simple_jax_model_4_hidden_128_noLastBias_scale_0.1_LR0.001'
     lrs = [0.001, 0.0001]
     n_epochs = 50
     to_save_model = True
-    model_state, out_model_name = make_model_name(train_mode, cg_cv_ratio, batch_size, model_layers, lrs, n_epochs)
-    
+    model_state, out_model_name = make_model_name(train_mode, cg_cv_ratio, batch_size, model_layers, lrs, n_epochs, stride, train_seed)
+    # out_model_name = f'{out_model_name}_RestartTrain'
+    print(f'Model name is {out_model_name}')
 
     ## Index arrays    
     cg_atoms = np.array([5,7,9,11,15,17])-1
@@ -269,14 +278,14 @@ if __name__ == "__main__":
 
 
     ## Output files
-    fproj_out_file = '/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/feature_divergence/all_force_proj_operators.npy'
-    div_out_dir = '/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/feature_divergence'
-    preloaded_data_out_file = '/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/feature_divergence/precomputed_dataset.npz'
+    fproj_out_file = f'/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/feature_divergence/all_force_proj_operators_stride{stride}.npy'
+    div_out_dir = f'/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/feature_divergence_stride{stride}'
+    preloaded_data_out_file = f'/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/feature_divergence/precomputed_dataset_stride{stride}.npz'
 
     if to_load_precomputed_dataset is False:
         print('Loading trajectory...')
         ## Load coordinates, trajectory, forces, forcemap
-        aladi_crd, traj, aladi_forces, forcemap = load_ala2_data(aladi_file, top_file, forcemap_file)
+        aladi_crd, traj, aladi_forces, forcemap = load_ala2_data(aladi_file, top_file, forcemap_file, stride=stride)
 
         ## Compute dihedrals
         print('Computing dihedrals...')
@@ -425,8 +434,7 @@ if __name__ == "__main__":
     )
 
     ## Initialize neural network parameters
-    seed = 0
-    key = jax.random.PRNGKey(seed)
+    key = jax.random.PRNGKey(train_seed)
     params = init_MLP(model_layers, key)
 
     ## Train neural network
@@ -439,8 +447,8 @@ if __name__ == "__main__":
     ## Load weights if training is to be restarted
     if to_restart_training:
         params = pickle.load(open(f'models/{restart_model_name}.pkl', 'rb'))
-        losses = np.load(f'models/losses_{restart_model_name}.npy')
-        losses = list(losses)
+        # losses = np.load(f'models/losses_{restart_model_name}.npy')
+        # losses = list(losses)
 
     if to_train_model:
         print('Training model...')

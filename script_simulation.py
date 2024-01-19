@@ -16,6 +16,7 @@ from script_training import load_ala2_data
 import mdtraj as md
 from dataloader import select_start_configs
 import os
+from tqdm import tqdm
 
 def simulator(
         x0,
@@ -31,7 +32,7 @@ def simulator(
     partial_step_fn = jax.tree_util.Partial(step_fn, dt=dt, write_every=write_every)
 
     ## Loop over all starting configurations
-    for i in range(x0.shape[0]):
+    for i in tqdm(range(x0.shape[0])):
         state = init_state(
             jnp.array(x0[i]), 
             jnp.array(forcefield(params, jnp.array(x0[i])))
@@ -65,19 +66,19 @@ if __name__ == "__main__":
     aladi_file = f'{import_home}/all_atom_data/raw_trajectory/alanine-dipeptide-1Mx1ps-with-force.npz'
     top_file = f'{import_home}/all_atom_data/raw_trajectory/alanine_1mn.pdb'
     forcemap_file = f'{import_home}/force_maps/basic_force_map.npy'
-    model_name = 'mode=cv+cg_cgcvrat=0.10:0.90_bs=64_n_layers=4_width=256_startLR=0.001_endLR=0.0001_epochs=50'
-    run_index = 4
+    model_name = 'mode=cv+cg_cgcvrat=0.100:0.900_bs=64_n_layers=4_width=256_startLR=0.001_endLR=0.0001_epochs=50_stride=2'
+    run_index = 2
     sim_dir = f'{import_home}/simulation_output/projected_force_simulations/{model_name}_run{run_index}'
     ## Make storage directory
-    os.mkdir(sim_dir)
+    os.makedirs(sim_dir, exist_ok=True)
     sim_out_file = f'{sim_dir}/sim_{{}}_{{}}.pkl'
     
     ## Set simulation parameters
     ngrid = 10
-    nstep_ala2 = 10**4
-    dt = 1e-6
+    nstep_ala2 = 10**6
+    dt = 5e-5
     D = 1
-    write_every = 10
+    write_every = 100
     beta = 1.6776
     friction = 1
     vscale = np.exp(- dt * friction)
@@ -133,4 +134,19 @@ if __name__ == "__main__":
         sim_out_file=sim_out_file,
         dt=dt,
         timestep=timestep
-        )
+    )
+
+    ## Save simulation state
+    pickle.dump(
+        {
+            'ngrid': ngrid, 
+            'nstep_ala2': nstep_ala2, 
+            'dt': dt, 
+            'D': D, 
+            'write_every': write_every, 
+            'beta': beta, 
+            'friction': friction,
+            'starting_configs': x0_ala2_phipsicover,
+        },
+        open(sim_out_file.format('state', 'pickle'), 'wb')
+    )

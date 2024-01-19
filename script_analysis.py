@@ -15,10 +15,11 @@ from plotting_functions import load_default_params, format_plot
 if __name__ == "__main__":
 
     cg_atoms = np.array([5,7,9,11,15,17]) - 1 # [4, 6, 8, 10, 14, 16]
-
+    stride = 2
+    
     ## File labels
-    preloaded_data_out_file = '/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/feature_divergence/precomputed_dataset.npz'
-    model_name = 'mode=cv+cg_cgcvrat=0.10:0.90_bs=64_n_layers=4_width=256_startLR=0.001_endLR=0.0001_epochs=50'
+    preloaded_data_out_file = f'/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/feature_divergence/precomputed_dataset_stride{stride}.npz'
+    model_name = 'mode=cv+cg_cgcvrat=0.100:0.900_bs=64_n_layers=4_width=256_startLR=0.001_endLR=0.0001_epochs=50_stride=2'
     test_model_file = f'/home/mi/atkelkar/python_codes/projected_force_matching/models/{model_name}.pkl'
     to_save_plot = True
 
