@@ -13,7 +13,7 @@ from nn import batched_predict_force
 from featurize import featurize
 from tqdm import tqdm
 from glob import glob
-
+from plotting_functions import load_default_params, format_plot
 
 def make_test_preds(params, testloader):
     ## Predict forces for test set based on coordinates
@@ -142,11 +142,44 @@ def make_fe_plot(
     fig, ax = plt.subplots()
 
     ## Make contour plot
-    ax.contourf(
+    a = ax.contourf(
         bins_1[:-1], bins_2[:-1],
         fe.T - fe.T.min(),
         levels=levels,
         cmap=cmap,
     )
 
+    ## Add colorbar
+    fig.colorbar(a, ax=ax)
+
+    ## Format plot
+    kwargs = load_default_params('$\\phi$', '$\\psi$')
+    ax = format_plot(ax, **kwargs)
+    
     return fig, ax
+
+def plot_dist_hist(
+        ax, 
+        ref_dists, 
+        pair_dists, 
+        bins=50
+        ):
+
+    ## plot reference histogram
+    ax.hist(ref_dists, bins=bins, label='reference')
+
+    ## plot data histogram
+    ax.hist(pair_dists, bins=bins, label='simulation')
+
+    return ax
+
+
+def make_dist_hist_plots(ref_pairwise_distances, pairwise_distances):
+
+    fig, axes = plt.subplots(nrows=2, ncols=ref_pairwise_distances.shape[1]//2)
+    
+    ## Loop over all plots
+    for i, ax in enumerate(axes.flatten()):
+        ax = plot_dist_hist(ax, ref_pairwise_distances[:, i], pairwise_distances[:, i])
+
+    return fig, axes
