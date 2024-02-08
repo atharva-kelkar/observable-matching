@@ -10,7 +10,7 @@ import jax
 import matplotlib.pyplot as plt
 from jax import vmap, jit
 from nn import batched_predict_force
-from featurize import featurize
+from featurize import ala2_featurize
 from tqdm import tqdm
 from glob import glob
 from plotting_functions import load_default_params, format_plot
@@ -34,7 +34,7 @@ def make_test_preds(params, testloader):
         f_label_all.append(f)
         label_feat.append(feat)
         ## Calculate features for entire batch
-        calc_feat.append(vmap(featurize)(x))
+        calc_feat.append(vmap(ala2_featurize)(x))
 
     return np.concatenate(f_pred_all), \
             np.concatenate(f_label_all), \

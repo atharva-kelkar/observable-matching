@@ -23,7 +23,7 @@ def energy(params, feat, nonlinearity=jax.nn.tanh):
     w_last, b_last = params[-1]
     return jnp.dot(w_last, activation) # + b_last
 
-
+@partial(jit, static_argnums=(1,))
 def predict_energy(params, featurize, x):
     """Function that predicts energy using forward pass through NN with features as input"""
     ## Featurize coordinates
@@ -35,7 +35,7 @@ def predict_energy(params, featurize, x):
 
 def predict_force(params, x, f_proj, div):
     ## Calculate force as a (minus) derivative of energy
-    f_cg = - grad(predict_energy, argnums=1)(params, ala2_featurize, x)
+    f_cg = - grad(predict_energy, argnums=2)(params, ala2_featurize, x)
     ## Project force
     f_cv = project_force(f_cg, f_proj, div)
     ## Return projected force
@@ -68,10 +68,10 @@ def loss_fn(params, x, f, f_proj, div):
     return jnp.mean((f_pred  - f) ** 2)
 
 
-def weighted_loss_fn(params, x, f, f_proj, div, wts):
+def weighted_loss_fn(params, x, f, f_proj, det_G_weight, div, wts):
     """Function to calculate MSE loss"""
     f_pred = batched_predict_force(params, x, f_proj, div)
-    return jnp.mean(wts * (f_pred  - f) ** 2)
+    return jnp.mean(wts * (f_pred * det_G_weight - f) ** 2)
 
 @jit
 def update(param, x, y, f_proj, div, lr):
@@ -81,15 +81,15 @@ def update(param, x, y, f_proj, div, lr):
 
 # @partial(jit, static_argnums=(0,))
 # @jit
-def weighted_update(param, x, y, f_proj, div, lr, wts):
+def weighted_update(param, x, y, f_proj, det_G_weight, div, lr, wts):
     """Function to update parameters of NN based on gradient steps"""
-    loss, grad_loss = jax.value_and_grad(weighted_loss_fn)(param, x, y, f_proj, div, wts)
+    loss, grad_loss = jax.value_and_grad(weighted_loss_fn)(param, x, y, f_proj, det_G_weight, div, wts)
     return loss, jax.tree_util.tree_map(lambda x, g: x - g * lr, param, grad_loss), grad_loss
 
 ## Section with CG forces
 def predict_cg_force(params, x):
     ## Calculate CG force as a (minus) derivative of energy
-    return - grad(predict_energy, argnums=1)(params, x)
+    return - grad(predict_energy, argnums=2)(params, ala2_featurize, x)
 
 batched_predict_cg_force = vmap(predict_cg_force, in_axes=(None, 0))
 batched_predict_cv_force = batched_predict_force
@@ -97,7 +97,7 @@ batched_predict_cv_force = batched_predict_force
 def cv_force_loss(params, x, f_cv, f_proj, div, cv_wts):
     """Function to calculate MSE loss of CV force"""
     f_cv_pred = batched_predict_cv_force(params, x, f_proj, div)
-    return jnp.mean(cv_wts * (f_cv_pred  - f_cv) ** 2)
+    return jnp.mean(cv_wts * (f_cv_pred - f_cv) ** 2)
 
 def cg_force_loss(params, x, f_cg):
     """Function to calculate MSE loss of CG force"""

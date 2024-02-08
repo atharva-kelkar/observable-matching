@@ -15,11 +15,6 @@ import pytest
 def test_calc_G(input_n, expected):
     def featurize(xx):
         return jnp.concatenate([xx[0]**2 + xx[1]**2, 3 * xx[0] + 4 * xx[1]])
-    
-    ## Define dummy point
-    # xx = jnp.array([[1.], [1.]])
-    ## Define solution
-    # sol = jnp.array([[8., 14.],[14., 25.]])
     ## Calculate G
     _, G = calc_G(input_n, featurize)
     ## Compare G to solution
