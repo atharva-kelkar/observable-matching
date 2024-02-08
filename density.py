@@ -149,9 +149,9 @@ def gaussian_kde_adaptive2(x, ncenter_max=50, ndata_min=100, periodic=False):
     
     return adaptive_centers, adaptive_widths, kde    
 
-
-def density2force(x, density, periodic=False):
-    energy = -np.log(density)
+def density2force(x, density, beta=1, periodic=False):
+    # fe = - beta^-1 * log(density)
+    energy = - beta**(-1) * np.log(density)
     I = np.isfinite(density)
     d_energy = energy[I][1:] - energy[I][:-1]
     d_x = x[I][1:] - x[I][:-1]

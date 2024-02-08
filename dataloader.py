@@ -16,10 +16,11 @@ def custom_collate(batch):
     ics = np.array(transposed_data[1])
     f_cg = np.array(transposed_data[2])
     f_proj = np.array(transposed_data[3])
-    div_term = np.array(transposed_data[4])
-    kde_forces = np.array(transposed_data[5])
+    det_G = np.array(transposed_data[4])
+    div_term = np.array(transposed_data[5])
+    kde_forces = np.array(transposed_data[6])
     
-    return coords, ics, f_cg, f_proj, div_term, kde_forces
+    return coords, ics, f_cg, f_proj, det_G, div_term, kde_forces
 
 def create_test_train_datasets(
         aladi_crd,
@@ -27,6 +28,7 @@ def create_test_train_datasets(
         aladi_cg_force,
         cg_atoms,
         force_proj_arr,
+        det_G_arr,
         div_arr,
         interpolated_forces,
         training_test_ratio = 5,
@@ -43,6 +45,7 @@ def create_test_train_datasets(
                                           torch.tensor(all_x[I_train]), # all_x is array of all internal coordinates
                                           torch.tensor(aladi_cg_force[I_train]),
                                           torch.tensor(force_proj_arr[I_train]),
+                                          torch.tensor(det_G_arr[I_train]),
                                           torch.tensor(div_arr[I_train]),
                                           torch.tensor(interpolated_forces[I_train].astype(np.float32)))
 
@@ -50,6 +53,7 @@ def create_test_train_datasets(
                                             torch.tensor(all_x[I_test]), # all_x is array of all internal coordinates
                                             torch.tensor(aladi_cg_force[I_test]),
                                             torch.tensor(force_proj_arr[I_test]),
+                                            torch.tensor(det_G_arr[I_test]),
                                             torch.tensor(div_arr[I_test]),
                                             torch.tensor(interpolated_forces[I_test].astype(np.float32)),
                                             )
@@ -88,6 +92,26 @@ def select_start_configs(
         aladi_crd,
         cg_atoms
         ):
+    """Function to select starting configurations, given trajectory dihedrals and number of grid points
+
+    Parameters
+    ----------
+    ngrid : int
+        Number of grid points on phi and psi grid
+    phi_traj : np.ndarray
+        Array of phi angles
+    psi_traj : np.ndarray
+        Array of psi angles
+    aladi_crd : np.ndarray
+        Array of ala2 positions
+    cg_atoms : list
+        List of CG atoms
+
+    Returns
+    -------
+    [x0_ala2_phipsicover, phipsi]
+        _description_
+    """
     # Make grid of equally spaced points from -pi to +pi
     agrid = np.linspace(-np.pi, np.pi, int(ngrid+1))[:-1] + (np.pi/ngrid)
     # Define tolerance based on grid size
