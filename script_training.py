@@ -45,7 +45,8 @@ def calc_density_and_force_from_trajectory(
         feat_traj, 
         kde_func, 
         periodic,
-        **kwargs
+        beta,
+        **kwargs,
         ):
     # KDE for torsions:
     kde_centers = []
@@ -64,19 +65,11 @@ def calc_density_and_force_from_trajectory(
         ## Append kernel density to list
         kde_densities.append(kde)
         ## Append force calculated from density to list
-        kde_forces.append(density2force(centers, kde, periodic=periodic))
+        kde_forces.append(density2force(centers, kde, periodic=periodic, beta=beta))
         #acenters, akernel_size, akde = gaussian_kde_adaptive(torsions, n=50, periodic=True)
 
     return kde_centers, kde_kernelsizes, kde_densities, kde_forces
 
-# def ala2_main(
-#         aladi_file: str,
-#         top_file: str,
-#         forcemap_file: str,
-#         cg_atoms: np.ndarray = np.array([5,7,9,11,15,17])-1,
-#         torsion_cg_idx: list = [[0,1,2,4], [1,2,4,5]],
-
-#     ):
 
 def interpolate_forces(feats, kde_centers, kde_forces, list_to_append):
     for i in range(feats.shape[1]):
@@ -88,7 +81,8 @@ def force_projection_calculator(
         cg_atoms, 
         torsion_cg_idx, 
         dist_cg_idx,
-        out_file='',
+        fproj_out_file='',
+        det_G_out_file='',
         to_save_output=True
         ):
     ## Jit and vmap force projection operator
@@ -96,29 +90,37 @@ def force_projection_calculator(
     jit_force_calc = jit(vmap(force_calc, in_axes=(0)))
     
     ## Calculate output used jitted function
-    output = jit_force_calc(
+    _, sum_G_inv_dot_q, det_G = jit_force_calc(
         aladi_crd[:, cg_atoms], 
         )
     
     ## Convert JITted output to correct shape
-    jit_out_np = np.array(output[1])
+    jit_out_np = np.array(sum_G_inv_dot_q)
+    det_G_arr = np.array(det_G)
 
     ## Convert NumPy array into proper shape
-    n = len(output[1][0])
-    jit_out = np.zeros((len(output[1][0]), 12, 6, 3))
+    n_feat, n, n_beads, n_dim = jit_out_np.shape
+    jit_out = np.zeros((n, n_feat, n_beads, n_dim))
     for i in tqdm(range(n)):
         jit_out[i] = jit_out_np[:, i]
         
     force_proj_arr = jit_out.astype(np.float32)
+    
     ## Save output array
     if to_save_output:
-        print(f'***** OUT FILE IS {out_file} *****')
+        print(f'***** OUT FILE IS {fproj_out_file} *****')
         np.save(
-            out_file,
+            fproj_out_file,
             force_proj_arr
         )
 
-    return force_proj_arr
+        print(f'***** OUT FILE IS {det_G_out_file} *****')
+        np.save(
+            det_G_out_file,
+            det_G_arr
+        )
+
+    return force_proj_arr, det_G_arr
 
 def divergence_calculator(
         aladi_crd, 
@@ -188,7 +190,7 @@ def trainer(
     ## Training loop
     for lr in lrs:
         for epoch in tqdm(range(n_epochs)):
-            for i, (x, _, f_cg, f_proj, div, f_cv) in tqdm(enumerate(trainloader), total=len(trainloader)):
+            for i, (x, _, f_cg, f_proj, det_G_weight, div, f_cv) in tqdm(enumerate(trainloader), total=len(trainloader)):
                 if i % 250 == 1:
                     losses_cv.append(loss_cv)
                     grad_losses_cv.append(grad_loss_cv)
@@ -197,11 +199,13 @@ def trainer(
                         grad_losses_cg.append(grad_loss_cg)
                     # print(f'Running for i={i}, loss value of {losses[-1]}')
                 if train_mode == 'cv':
-                    loss, params, grad_loss = jit_wtd_update(params, x, f_cv, f_proj, div, lr)
+                    loss, params, grad_loss = jit_wtd_update(params, x, f_cv, f_proj, det_G_weight, div, lr)
                 elif train_mode == 'cv+cg':
+                    # print(f'shape of x from training loop is: {x.shape}')
                     loss_cg, loss_cv, params, grad_loss_cg, grad_loss_cv = jit_wtd_update(params, x, f_cg, f_cv, f_proj, div, lr)
             print(loss_cg, loss_cv)
-    
+    # def weighted_update_with_cg                                                        (param, x, f_cg, y, f_proj, det_G_weight, div, lr, wts, cg_cv_wts):
+
     if to_save_model:
         ## Save model parameters
         pickle.dump(params, open(f'models/{out_model_name}.pkl', 'wb'))
@@ -239,29 +243,44 @@ def make_model_name(train_mode, cg_cv_ratio, batch_size, model_layers, lrs, n_ep
     
     return state, model_name
 
+def load_model_state(state_model_file):
+    state = np.load(state_model_file, allow_pickle=True)
+    return state['train_mode'], state['cg_cv_ratio'], state['model_layers'], state['lrs'], state['n_epochs']
+
+
 if __name__ == "__main__":
 
     ## Debug section
     aladi_file = '/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/raw_trajectory/alanine-dipeptide-1Mx1ps-with-force.npz'
     top_file = '/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/raw_trajectory/alanine_1mn.pdb'
     forcemap_file = '/import/a12/users/atkelkar/data/AlanineDipeptide/force_maps/basic_force_map.npy'
-    stride = 2
+    state_model_file = 'models/state_mode=cv+cg_cgcvrat=0.10:0.90_bs=64_n_layers=4_width=256_startLR=0.001_endLR=0.0001_epochs=50.pkl'
+    
+    stride = 1
     ## Flag variables
     calculate_fproj_arr, calculate_div_arr = True, True
-    to_save_int_output = False
+    save_fproj_arr, save_div_arr = True, True
+    to_save_int_output = True
     to_load_precomputed_dataset = False
-    to_train_model = False
+    to_load_model_state = True
+    to_train_model = True
     to_restart_training = False
-    to_save_model = False
+    to_save_model = True
     ## Model training variables
-    train_mode = 'cv+cg' # 'cv' or 'cv+cg'
-    cg_cv_ratio = jnp.array([0.1, 0.9])
-    model_layers = [12, 256, 256, 256, 256, 1]
+    if to_load_model_state:
+        train_mode, cg_cv_ratio, model_layers, lrs, n_epochs = load_model_state(state_model_file)
+        ## Manual override to save different model
+        n_epochs = 49
+    else:
+        train_mode = 'cv+cg' # 'cv' or 'cv+cg'
+        cg_cv_ratio = jnp.array([0.1, 0.9])
+        model_layers = [12, 256, 256, 256, 256, 1]
+        lrs = [0.001, 0.0001]
+        n_epochs = 50
+    
     batch_size = 64
     train_seed = 0
     restart_model_name = 'mode=cv+cg_cgcvrat=0.10:0.90_bs=64_n_layers=4_width=256_startLR=0.001_endLR=0.001_epochs=10' # 'simple_jax_model_4_hidden_128_noLastBias_scale_0.1_LR0.001'
-    lrs = [0.001, 0.0001]
-    n_epochs = 50
     model_state, out_model_name = make_model_name(train_mode, cg_cv_ratio, batch_size, model_layers, lrs, n_epochs, stride, train_seed)
     # out_model_name = f'{out_model_name}_RestartTrain'
     print(f'Model name is {out_model_name}')
@@ -280,6 +299,7 @@ if __name__ == "__main__":
 
     ## Output files
     fproj_out_file = f'/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/feature_divergence/all_force_proj_operators_stride{stride}.npy'
+    det_G_out_file = f'/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/feature_divergence/all_det_G_stride{stride}.npy'
     div_out_dir = f'/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/feature_divergence_stride{stride}'
     preloaded_data_out_file = f'/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/feature_divergence/precomputed_dataset_stride{stride}.npz'
 
@@ -360,15 +380,18 @@ if __name__ == "__main__":
         ## Calculate force projection operator
         if calculate_fproj_arr:
             print('Calculating force projection operator...')
-            force_proj_arr = force_projection_calculator(
-                aladi_crd,
-                cg_atoms,
-                torsion_cg_idx,
-                dist_cg_idx,
-                fproj_out_file
+            force_proj_arr, det_G_arr = force_projection_calculator(
+                aladi_crd=aladi_crd,
+                cg_atoms=cg_atoms,
+                torsion_cg_idx=torsion_cg_idx,
+                dist_cg_idx=dist_cg_idx,
+                fproj_out_file=fproj_out_file,
+                det_G_out_file=det_G_out_file,
+                to_save_output=save_fproj_arr
                 )
         else:
             force_proj_arr = np.load(fproj_out_file)
+            det_G_arr = np.load(det_G_out_file)
         
         ## Calculate divergence operator
         if calculate_div_arr:
@@ -393,6 +416,11 @@ if __name__ == "__main__":
         ## Calculate aggregated CG force
         aladi_cg_force = forcemap @ aladi_forces
 
+        ## Make reweighting term for each force output
+        # TODO Leaving this as ones right now because subspace clustering would be super-sparse
+        # Check again later
+        det_G_weight_arr = np.ones((len(aladi_crd)))
+
         if to_save_int_output:
             print('Saving precomputed output data')
             preloaded_data = np.savez(
@@ -400,9 +428,11 @@ if __name__ == "__main__":
                 coords=aladi_crd,
                 cg_force=aladi_cg_force,
                 f_proj_arr=force_proj_arr,
+                det_G_weight=det_G_weight_arr,
                 div_arr=div_arr,
                 kde_forces=interpolated_forces,
-                all_feats=all_feats
+                all_feats=all_feats,
+
             )
     elif to_load_precomputed_dataset is True:
         print('Loading pre-computed dataset...')
@@ -410,6 +440,7 @@ if __name__ == "__main__":
         aladi_crd = preloaded_data['coords']
         aladi_cg_force = preloaded_data['cg_force']
         force_proj_arr = preloaded_data['f_proj_arr']
+        det_G_weight_arr = preloaded_data['det_G_weight'][:, None]
         div_arr = preloaded_data['div_arr']
         interpolated_forces = preloaded_data['kde_forces']
         all_feats = preloaded_data['all_feats']
@@ -419,8 +450,6 @@ if __name__ == "__main__":
     force_norms = jnp.sqrt(np.mean((interpolated_forces)**2, axis=0))
     loss_wts = 1 / force_norms
 
-
-
     ## Make dataloaders
     print('Creating training and test datasets...')
     trainloader, testloader = create_test_train_datasets(
@@ -429,6 +458,7 @@ if __name__ == "__main__":
         aladi_cg_force,
         cg_atoms,
         force_proj_arr,
+        det_G_weight_arr,
         div_arr,
         interpolated_forces,
         batch_size=batch_size
