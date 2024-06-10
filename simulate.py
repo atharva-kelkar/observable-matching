@@ -11,6 +11,7 @@ import jax
 from jax import grad, jit, lax
 import jax.numpy as jnp
 from nn import predict_energy
+from featurize import ala2_featurize
 
 """Functions adapted from https://github.com/jax-md/jax-md"""
 
@@ -115,9 +116,10 @@ class VeloState:
     masses: Array
     rng: Array
 
+
 def forcefield(params, x):
     """Function that returns force on each position given NN params"""
-    return - grad( predict_energy, argnums=1 )( params, x )
+    return - grad( predict_energy, argnums=2 )( params, ala2_featurize, x )
 
 @jit
 def init_state(x, f):
