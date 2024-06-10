@@ -11,11 +11,11 @@ import mdtraj as md
 
 
 if __name__ == "__main__":
-    import_home = '/import/a12/users/atkelkar/data/AlanineDipeptide/simulation_output/projected_force_simulations/'
-    stride = 2
-    ref_dataset_file = f'/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/feature_divergence/precomputed_dataset_stride{stride}.npz'
-    model_name = 'mode=cv+cg_cgcvrat=0.10:0.90_bs=64_n_layers=4_width=256_startLR=0.001_endLR=0.0001_epochs=50'
-    run_index = 7
+    import_home = '/group/ag_clementi_cmb/users/atkelkar/data/AlanineDipeptide/simulation_output/projected_force_simulations/'
+    stride = 1
+    ref_dataset_file = f'/group/ag_clementi_cmb/users/atkelkar/data/AlanineDipeptide/all_atom_data/feature_divergence/precomputed_dataset_stride{stride}.npz'
+    model_name = '202405_mode=cv+cg_cgcvrat=0.900:0.100_bs=64_n_layers=4_width=256_startLR=0.001_endLR=0.0001_epochs=50_stride=1'
+    run_index = 1
     sim_folder = f'{import_home}/{model_name}_run{run_index}'
     cg_atoms = np.array([5,7,9,11,15,17])-1
     torsion_cg_idx = [[0,1,2,4], [1,2,4,5]]
@@ -38,7 +38,7 @@ if __name__ == "__main__":
     )
 
     ## Load topology
-    top_file = '/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/raw_trajectory/alanine_1mn.pdb'
+    top_file = '/group/ag_clementi_cmb/users/atkelkar/data/AlanineDipeptide/all_atom_data/raw_trajectory/alanine_1mn.pdb'
     top = md.load(top_file)
 
     ## Filter only CG atoms
