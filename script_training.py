@@ -7,9 +7,9 @@
 
 import numpy as np
 import mdtraj as md
+from dataloader import create_test_train_datasets
 from density import gaussian_kde, gaussian_kde_adaptive2, density2force, compute_forces
 from projection import calc_force_proj_operator, calc_div_operator
-from dataloader import create_test_train_datasets
 from nn import init_MLP, weighted_update, weighted_update_with_cg
 import jax
 from jax import jit, vmap
@@ -176,6 +176,7 @@ def trainer(
         to_save_model,
         out_model_name,
         model_state,
+        model_out_folder,
         train_mode='cv',
         cg_cv_wts=jnp.array([0.5, 0.5]),
         ):
@@ -208,8 +209,8 @@ def trainer(
 
     if to_save_model:
         ## Save model parameters
-        pickle.dump(params, open(f'models/{out_model_name}.pkl', 'wb'))
-        pickle.dump(model_state, open(f'models/state_{out_model_name}.pkl', 'wb'))
+        pickle.dump(params, open(f'{model_out_folder}/models/{out_model_name}.pkl', 'wb'))
+        pickle.dump(model_state, open(f'{model_out_folder}/models/state_{out_model_name}.pkl', 'wb'))
         ## Save losses
         # np.save(f'models/losses_{out_model_name}.npy', losses)
         pickle.dump(
@@ -219,7 +220,7 @@ def trainer(
                 'grad_loss_cg' : grad_losses_cg,
                 'grad_losses_cv' : grad_losses_cv,
             },
-            open(f'models/losses_{out_model_name}.pkl', 'wb') 
+            open(f'{model_out_folder}/models/losses_{out_model_name}.pkl', 'wb') 
         )
 
 def make_model_name(train_mode, cg_cv_ratio, batch_size, model_layers, lrs, n_epochs, stride, train_seed):
@@ -251,10 +252,13 @@ def load_model_state(state_model_file):
 if __name__ == "__main__":
 
     ## Debug section
-    aladi_file = '/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/raw_trajectory/alanine-dipeptide-1Mx1ps-with-force.npz'
-    top_file = '/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/raw_trajectory/alanine_1mn.pdb'
-    forcemap_file = '/import/a12/users/atkelkar/data/AlanineDipeptide/force_maps/basic_force_map.npy'
-    state_model_file = 'models/state_mode=cv+cg_cgcvrat=0.10:0.90_bs=64_n_layers=4_width=256_startLR=0.001_endLR=0.0001_epochs=50.pkl'
+    import_home = '/import/a12/users/atkelkar'
+    ala2_home = f'{import_home}/data/AlanineDipeptide/'
+    model_out_folder = f'{ala2_home}/projected_force_matching/'
+    aladi_file = f'{ala2_home}/all_atom_data/raw_trajectory/alanine-dipeptide-1Mx1ps-with-force.npz'
+    top_file = f'{ala2_home}/all_atom_data/raw_trajectory/alanine_1mn.pdb'
+    forcemap_file = f'{ala2_home}/force_maps/basic_force_map.npy'
+    state_model_file = f'{model_out_folder}/models/state_mode=cv+cg_cgcvrat=0.10:0.90_bs=64_n_layers=4_width=256_startLR=0.001_endLR=0.0001_epochs=50.pkl'
     
     stride = 1
     ## Flag variables
@@ -262,7 +266,7 @@ if __name__ == "__main__":
     save_fproj_arr, save_div_arr = True, True
     to_save_int_output = True
     to_load_precomputed_dataset = False
-    to_load_model_state = True
+    to_load_model_state = False
     to_train_model = True
     to_restart_training = False
     to_save_model = True
@@ -273,7 +277,7 @@ if __name__ == "__main__":
         n_epochs = 49
     else:
         train_mode = 'cv+cg' # 'cv' or 'cv+cg'
-        cg_cv_ratio = jnp.array([0.1, 0.9])
+        cg_cv_ratio = jnp.array([0.9, 0.1])
         model_layers = [12, 256, 256, 256, 256, 1]
         lrs = [0.001, 0.0001]
         n_epochs = 50
@@ -283,6 +287,7 @@ if __name__ == "__main__":
     restart_model_name = 'mode=cv+cg_cgcvrat=0.10:0.90_bs=64_n_layers=4_width=256_startLR=0.001_endLR=0.001_epochs=10' # 'simple_jax_model_4_hidden_128_noLastBias_scale_0.1_LR0.001'
     model_state, out_model_name = make_model_name(train_mode, cg_cv_ratio, batch_size, model_layers, lrs, n_epochs, stride, train_seed)
     # out_model_name = f'{out_model_name}_RestartTrain'
+    out_model_name = f'202405_{out_model_name}'
     print(f'Model name is {out_model_name}')
 
     ## Index arrays    
@@ -295,13 +300,16 @@ if __name__ == "__main__":
     ## Make NumPy arrays of indices
     torsion_cg_idx = np.array(torsion_cg_idx)
     dist_cg_idx = np.array(bond_cg_idx + [[a[0], a[2]] for a in angle_cg_idx])
+    kB = 1.987e-3
+    T = 300
+    beta = 1 / (kB * T)
 
 
     ## Output files
-    fproj_out_file = f'/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/feature_divergence/all_force_proj_operators_stride{stride}.npy'
-    det_G_out_file = f'/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/feature_divergence/all_det_G_stride{stride}.npy'
-    div_out_dir = f'/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/feature_divergence_stride{stride}'
-    preloaded_data_out_file = f'/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/feature_divergence/precomputed_dataset_stride{stride}.npz'
+    fproj_out_file = f'{ala2_home}/all_atom_data/feature_divergence/all_force_proj_operators_stride{stride}.npy'
+    det_G_out_file = f'{ala2_home}/all_atom_data/feature_divergence/all_det_G_stride{stride}.npy'
+    div_out_dir = f'{ala2_home}/all_atom_data/feature_divergence_stride{stride}'
+    preloaded_data_out_file = f'{ala2_home}/all_atom_data/feature_divergence/precomputed_dataset_stride{stride}.npz'
 
     if to_load_precomputed_dataset is False:
         print('Loading trajectory...')
@@ -320,12 +328,14 @@ if __name__ == "__main__":
             torsion_traj, 
             gaussian_kde,
             periodic=True,
+            beta=beta,
         )
 
         torsion_akde_centers, torsion_akde_kernelsizes, torsion_akde_densities, torsion_akde_forces = calc_density_and_force_from_trajectory(
             torsion_traj, 
             gaussian_kde_adaptive2,
             periodic=True,
+            beta=beta,
             **{'ncenter_max':100, # Default for AKDE
                 'ndata_min':100, # Default for AKDE
             }
@@ -342,12 +352,14 @@ if __name__ == "__main__":
             dists, 
             gaussian_kde,
             periodic=False,
+            beta=beta,
         )
 
         dist_akde_centers, dist_akde_kernelsizes, dist_akde_densities, dist_akde_forces = calc_density_and_force_from_trajectory(
             dists, 
             gaussian_kde_adaptive2,
             periodic=False,
+            beta=beta,
             **{'ncenter_max':100, # Default for AKDE
                 'ndata_min':100, # Default for AKDE
             }
@@ -477,7 +489,7 @@ if __name__ == "__main__":
 
     ## Load weights if training is to be restarted
     if to_restart_training:
-        params = pickle.load(open(f'models/{restart_model_name}.pkl', 'rb'))
+        params = pickle.load(open(f'{model_out_folder}/models/{restart_model_name}.pkl', 'rb'))
         # losses = np.load(f'models/losses_{restart_model_name}.npy')
         # losses = list(losses)
 
@@ -493,7 +505,8 @@ if __name__ == "__main__":
             out_model_name=out_model_name,
             train_mode=train_mode,
             cg_cv_wts=cg_cv_ratio,
-            model_state=model_state
+            model_state=model_state,
+            model_out_folder=model_out_folder
         )
 
 

@@ -7,20 +7,21 @@
 
 import numpy as np 
 import matplotlib.pyplot as plt
-from jax import vmap, jit
 from dataloader import create_test_train_datasets
+from jax import vmap, jit
 from analysis import make_test_preds, make_label_pred_plot
 from plotting_functions import load_default_params, format_plot
 
 if __name__ == "__main__":
 
     cg_atoms = np.array([5,7,9,11,15,17]) - 1 # [4, 6, 8, 10, 14, 16]
-    stride = 2
+    stride = 1
     
     ## File labels
-    preloaded_data_out_file = f'/import/a12/users/atkelkar/data/AlanineDipeptide/all_atom_data/feature_divergence/precomputed_dataset_stride{stride}.npz'
-    model_name = 'mode=cv+cg_cgcvrat=0.100:0.900_bs=64_n_layers=4_width=256_startLR=0.001_endLR=0.0001_epochs=50_stride=2'
-    test_model_file = f'/home/mi/atkelkar/python_codes/projected_force_matching/models/{model_name}.pkl'
+    import_home = '/group/ag_clementi_cmb/users/atkelkar/data/AlanineDipeptide'
+    preloaded_data_out_file = f'{import_home}/all_atom_data/feature_divergence/precomputed_dataset_stride{stride}.npz'
+    model_name = '202405_mode=cv+cg_cgcvrat=0.900:0.100_bs=64_n_layers=4_width=256_startLR=0.001_endLR=0.0001_epochs=50_stride=1'
+    test_model_file = f'{import_home}/projected_force_matching/models/{model_name}.pkl'
     to_save_plot = True
 
     ## Load parameters of saved model
@@ -32,6 +33,7 @@ if __name__ == "__main__":
     aladi_cg_force = preloaded_data['cg_force']
     force_proj_arr = preloaded_data['f_proj_arr']
     div_arr = preloaded_data['div_arr']
+    det_G_weight_arr = preloaded_data['det_G_weight'][:, None]
     interpolated_forces = preloaded_data['kde_forces']
     all_feats = preloaded_data['all_feats']
 
@@ -42,6 +44,7 @@ if __name__ == "__main__":
         aladi_cg_force,
         cg_atoms,
         force_proj_arr,
+        det_G_weight_arr,
         div_arr,
         interpolated_forces,
         test_batch_size = 1024 * 10

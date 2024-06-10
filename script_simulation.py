@@ -6,15 +6,17 @@
 """
 
 import numpy as np
-from jax import lax, jit
+from dataloader import select_start_configs
+from jax import lax, jit,grad
 import jax.numpy as jnp
 import jax
-from simulate import forcefield, step_fn, init_state, timestep
+# from nn import predict_energy
+from featurize import ala2_featurize 
+from simulate import step_fn, init_state, timestep, forcefield
 import time
 import pickle
 from script_training import load_ala2_data
 import mdtraj as md
-from dataloader import select_start_configs
 import os
 from tqdm import tqdm
 
@@ -59,15 +61,20 @@ def simulator(
         pickle.dump(log['velocities'], open(sim_out_file.format('velocity', i), 'wb')) # open(f'{import_home}/sim_1mn_frames_dt_1em5_massRescale_{i}.pkl', 'wb'))
         pickle.dump(log['noise'], open(sim_out_file.format('noise', i), 'wb')) # open(f'{import_home}/sim_1mn_frames_dt_1em5_massRescale_{i}.pkl', 'wb'))
 
+# def forcefield(params, x):
+#     """Function that returns force on each position given NN params"""
+#     return - grad( predict_energy, argnums=2 )( params, ala2_featurize, x )
+    
 
 if __name__ == "__main__":
 
-    import_home = '/import/a12/users/atkelkar/data/AlanineDipeptide'
+
+    import_home = '/group/ag_clementi_cmb/users/atkelkar/data/AlanineDipeptide'
     aladi_file = f'{import_home}/all_atom_data/raw_trajectory/alanine-dipeptide-1Mx1ps-with-force.npz'
     top_file = f'{import_home}/all_atom_data/raw_trajectory/alanine_1mn.pdb'
     forcemap_file = f'{import_home}/force_maps/basic_force_map.npy'
-    model_name = 'mode=cv+cg_cgcvrat=0.100:0.900_bs=64_n_layers=4_width=256_startLR=0.001_endLR=0.0001_epochs=50_stride=2'
-    run_index = 2
+    model_name = '202405_mode=cv+cg_cgcvrat=0.900:0.100_bs=64_n_layers=4_width=256_startLR=0.001_endLR=0.0001_epochs=50_stride=1'
+    run_index = 1
     sim_dir = f'{import_home}/simulation_output/projected_force_simulations/{model_name}_run{run_index}'
     ## Make storage directory
     os.makedirs(sim_dir, exist_ok=True)
@@ -100,7 +107,7 @@ if __name__ == "__main__":
     psi_traj = torsion_traj[:, 1]
 
     ## Load model
-    params = pickle.load(open(f'models/{model_name}.pkl', 'rb'))
+    params = pickle.load(open(f'{import_home}/projected_force_matching/models/{model_name}.pkl', 'rb'))
 
     ## Get starting points
     x0_ala2_phipsicover, phipsi = select_start_configs(
@@ -123,6 +130,7 @@ if __name__ == "__main__":
         vscale=vscale,
         noisescale=noisescale,
     )
+    # timestep = jit(timestep, static_argnames=forcefield)
 
     ## Run simulation
     print(f'Running {len(x0_ala2_phipsicover)} simulations...')
