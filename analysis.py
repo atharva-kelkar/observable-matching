@@ -27,7 +27,7 @@ def make_test_preds(params, testloader):
     jitted_pred = jit(batched_predict_force)
 
     ## Loop over all batches of the testloader
-    for i, (x, feat, _, f_proj, div, f) in tqdm(enumerate(testloader), total=len(testloader)):
+    for i, (x, feat, _, f_proj, det_G_weight, div, f) in tqdm(enumerate(testloader), total=len(testloader)):
         ## Predict force for entire batch
         f_pred_projected = jitted_pred(params, x, f_proj, div)
         f_pred_all.append(f_pred_projected)
@@ -42,12 +42,14 @@ def make_test_preds(params, testloader):
             np.concatenate(calc_feat)
 
 
-def make_label_pred_plot(ax, feat, labels, preds, plot_stride=1):
+def make_label_pred_plot(ax, feat, labels, preds, plot_stride=1, plot_only_labels=True):
     ax.plot(
         feat[::plot_stride], labels[::plot_stride], 
         'o', markersize=1, 
         label="Labels"
         )
+    if plot_only_labels:
+        return ax
     
     ax.plot(
         feat[::plot_stride], preds[::plot_stride],
